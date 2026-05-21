@@ -9,79 +9,98 @@ import { useWeekBlocks } from '@/hooks/useBlocks'
 import { useAppState } from '@/lib/store'
 import { BlockCard } from '@/components/blocks/BlockCard'
 import { BlockModal } from '@/components/blocks/BlockModal'
-import { Block, PROJECT_COLORS, ColorKey } from '@/types'
+import { Block, Project, PROJECT_COLORS, ColorKey } from '@/types'
 import { cn } from '@/lib/utils'
 
-function DayColumn({
-  day,
-  blocks,
+function DroppableCell({
+  cellId,
+  children,
+  date,
   onAddClick,
-  onBlockClick,
 }: {
-  day: Date
-  blocks: Block[]
+  cellId: string
+  children: React.ReactNode
+  date: Date
   onAddClick: () => void
-  onBlockClick: (block: Block) => void
 }) {
-  const dateStr = format(day, 'yyyy-MM-dd')
-  const { isOver, setNodeRef } = useDroppable({ id: `cell-${dateStr}` })
-  const today = isToday(day)
-  const weekend = isSaturday(day) || isSunday(day)
-
-  const { data: projects = [] } = useProjects()
-  const projectMap = useMemo(() => Object.fromEntries(projects.map(p => [p.id, p])), [projects])
+  const { isOver, setNodeRef } = useDroppable({ id: cellId })
 
   return (
-    <div className="flex flex-col border-r border-gray-100 last:border-r-0">
-      {/* 날짜 헤더 */}
-      <div
-        className={cn(
-          'sticky top-0 z-20 px-2 py-2.5 border-b border-gray-200 text-center select-none flex-shrink-0',
-          today ? 'bg-gray-900' : weekend ? 'bg-gray-50' : 'bg-white',
-        )}
-      >
-        <div className="text-[11px] font-medium mb-0.5 text-gray-400">
-          {format(day, 'EEE', { locale: ko })}
-        </div>
-        <div className={cn('text-xl font-bold leading-none', today ? 'text-white' : weekend ? 'text-gray-400' : 'text-gray-800')}>
-          {format(day, 'd')}
-        </div>
-      </div>
-
-      {/* 블록 영역 */}
-      <div
-        ref={setNodeRef}
-        onClick={onAddClick}
-        className={cn(
-          'flex-1 min-h-[120px] p-1.5 space-y-0.5 relative group cursor-pointer transition-colors',
-          isOver && 'bg-blue-50 ring-1 ring-inset ring-blue-200',
-          today && 'bg-amber-50/30',
-          weekend && !today && 'bg-gray-50/60',
-        )}
-      >
-        {blocks.map(block => {
-          const project = projectMap[block.project_id]
-          if (!project) return null
-          return (
-            <BlockCard
-              key={block.id}
-              block={block}
-              project={project}
-              compact
-              onClick={e => { e?.stopPropagation(); onBlockClick(block) }}
-            />
-          )
-        })}
-        <div className="absolute bottom-1 right-1 w-5 h-5 rounded-full text-gray-400 items-center justify-center text-xs hidden group-hover:flex hover:bg-gray-200 transition-colors">
-          +
-        </div>
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'min-h-[64px] p-1.5 border-r border-b border-gray-100 relative group cursor-pointer',
+        isOver && 'bg-blue-50 ring-1 ring-inset ring-blue-200',
+        isToday(date) && 'bg-amber-50/40',
+        (isSaturday(date) || isSunday(date)) && !isToday(date) && 'bg-gray-50/70',
+      )}
+      onClick={onAddClick}
+    >
+      <div className="space-y-0.5">{children}</div>
+      <div className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-gray-200/0 text-gray-400 items-center justify-center text-xs hidden group-hover:flex hover:bg-gray-200 transition-colors">
+        +
       </div>
     </div>
   )
 }
 
+function ProjectRow({
+  project,
+  weekDays,
+  blocksByDate,
+  onCellClick,
+  onBlockClick,
+}: {
+  project: Project
+  weekDays: Date[]
+  blocksByDate: Map<string, Block[]>
+  onCellClick: (date: string, projectId: string) => void
+  onBlockClick: (block: Block) => void
+}) {
+  const color = PROJECT_COLORS[project.color as ColorKey]
+
+  return (
+    <>
+      {/* 프로젝트 이름 셀 - sticky left */}
+      <div
+        className="sticky left-0 z-10 flex items-center gap-2 px-3 py-2 border-r border-b border-gray-100 bg-white min-h-[64px]"
+        style={{ borderLeftColor: color.done.bg, borderLeftWidth: '3px' }}
+      >
+        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color.done.bg }} />
+        <span className="text-sm font-medium text-gray-800 truncate leading-snug">{project.name}</span>
+      </div>
+
+      {/* 날짜별 셀 */}
+      {weekDays.map(day => {
+        const dateStr = format(day, 'yyyy-MM-dd')
+        const cellBlocks = (blocksByDate.get(dateStr) ?? []).filter(b => b.project_id === project.id)
+
+        return (
+          <DroppableCell
+            key={dateStr}
+            cellId={`cell-${project.id}-${dateStr}`}
+            date={day}
+            onAddClick={() => onCellClick(dateStr, project.id)}
+          >
+            {cellBlocks.map(block => (
+              <BlockCard
+                key={block.id}
+                block={block}
+                project={project}
+                compact
+                onClick={(e) => { e?.stopPropagation(); onBlockClick(block) }}
+              />
+            ))}
+          </DroppableCell>
+        )
+      })}
+    </>
+  )
+}
+
 export function WeekGrid() {
   const { currentWeekStart, blockModal, openBlockModal, closeBlockModal } = useAppState()
+  const { data: projects = [] } = useProjects()
   const { data: blocks = [] } = useWeekBlocks(currentWeekStart)
   const [editBlock, setEditBlock] = useState<Block | null>(null)
 
@@ -99,22 +118,59 @@ export function WeekGrid() {
     return map
   }, [blocks])
 
+  const gridTemplateColumns = `200px repeat(7, minmax(130px, 1fr))`
+
   return (
     <>
       <div className="flex-1 overflow-auto">
-        <div className="grid min-h-full" style={{ gridTemplateColumns: 'repeat(7, minmax(120px, 1fr))' }}>
-          {weekDays.map(day => (
-            <DayColumn
-              key={day.toISOString()}
-              day={day}
-              blocks={blocksByDate.get(format(day, 'yyyy-MM-dd')) ?? []}
-              onAddClick={() => openBlockModal({ date: format(day, 'yyyy-MM-dd') })}
+        <div style={{ display: 'grid', gridTemplateColumns }} className="min-w-max">
+          {/* 헤더 행 */}
+          <div className="sticky top-0 left-0 z-30 bg-white border-r border-b border-gray-200 px-3 py-3 flex items-end">
+            <span className="text-xs text-gray-400 font-medium">프로젝트</span>
+          </div>
+          {weekDays.map(day => {
+            const today = isToday(day)
+            const weekend = isSaturday(day) || isSunday(day)
+            return (
+              <div
+                key={day.toISOString()}
+                className={cn(
+                  'sticky top-0 z-20 px-2 py-2.5 border-r border-b border-gray-200 text-center select-none',
+                  today ? 'bg-gray-900' : weekend ? 'bg-gray-50' : 'bg-white',
+                )}
+              >
+                <div className={cn('text-[11px] font-medium mb-0.5', today ? 'text-gray-400' : weekend ? 'text-gray-400' : 'text-gray-400')}>
+                  {format(day, 'EEE', { locale: ko })}
+                </div>
+                <div className={cn('text-xl font-bold leading-none', today ? 'text-white' : weekend ? 'text-gray-400' : 'text-gray-800')}>
+                  {format(day, 'd')}
+                </div>
+              </div>
+            )
+          })}
+
+          {/* 프로젝트 행들 */}
+          {projects.map(project => (
+            <ProjectRow
+              key={project.id}
+              project={project}
+              weekDays={weekDays}
+              blocksByDate={blocksByDate}
+              onCellClick={(date, projectId) => openBlockModal({ date, projectId })}
               onBlockClick={block => setEditBlock(block)}
             />
           ))}
+
+          {/* 빈 상태 */}
+          {projects.length === 0 && (
+            <div className="col-span-8 py-24 text-center text-gray-400 text-sm">
+              좌측 사이드바에서 프로젝트를 추가해보세요
+            </div>
+          )}
         </div>
       </div>
 
+      {/* 새 블록 모달 */}
       <BlockModal
         open={blockModal.open}
         onClose={closeBlockModal}
@@ -122,6 +178,7 @@ export function WeekGrid() {
         prefillProjectId={blockModal.prefillProjectId}
       />
 
+      {/* 수정 모달 */}
       {editBlock && (
         <BlockModal
           open
