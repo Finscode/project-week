@@ -2,21 +2,36 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
-import { mockStore } from '@/lib/mock-data'
+import { supabase } from '@/lib/supabase'
 import { Task } from '@/types'
 
 export function useTasks() {
   return useQuery({
     queryKey: queryKeys.tasks.all,
-    queryFn: () => mockStore.getTasks(),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('is_archived', false)
+        .order('position')
+      if (error) throw error
+      return data as Task[]
+    },
   })
 }
 
 export function useCreateTask() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { project_id: string; title: string }) =>
-      Promise.resolve(mockStore.createTask({ ...data, position: 0, is_archived: false })),
+    mutationFn: async (data: { project_id: string; title: string }) => {
+      const { data: result, error } = await supabase
+        .from('tasks')
+        .insert({ ...data, position: 0, is_archived: false })
+        .select()
+        .single()
+      if (error) throw error
+      return result as Task
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.tasks.all }),
   })
 }
@@ -24,10 +39,9 @@ export function useCreateTask() {
 export function useUpdateTask() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, title }: { id: string; title: string }) => {
-      const idx = mockStore.tasks.findIndex(t => t.id === id)
-      if (idx !== -1) mockStore.tasks[idx] = { ...mockStore.tasks[idx], title }
-      return Promise.resolve()
+    mutationFn: async ({ id, title }: { id: string; title: string }) => {
+      const { error } = await supabase.from('tasks').update({ title }).eq('id', id)
+      if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.tasks.all }),
   })
@@ -36,9 +50,9 @@ export function useUpdateTask() {
 export function useDeleteTask() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) => {
-      mockStore.deleteTask(id)
-      return Promise.resolve()
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('tasks').delete().eq('id', id)
+      if (error) throw error
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.tasks.all })
