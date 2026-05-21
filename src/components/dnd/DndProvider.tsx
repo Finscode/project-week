@@ -56,10 +56,9 @@ export function AppDndProvider({ children }: { children: React.ReactNode }) {
     const task = tasks.find(t => t.id === data.taskId)
     if (!task) return
 
-    // ── 주간 뷰 셀: "cell-{projectId}-{yyyy-MM-dd}" ──
+    // ── 주간 뷰 셀: "cell-{yyyy-MM-dd}" ──
     if (overId.startsWith('cell-')) {
-      const parts = overId.replace('cell-', '').split('-')
-      const dropDate = parts.slice(-3).join('-')
+      const dropDate = overId.replace('cell-', '')
       createBlock({
         project_id: task.project_id,
         task_id: task.id,
