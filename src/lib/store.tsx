@@ -18,11 +18,12 @@ interface AppState {
   // 블록 모달
   blockModal: {
     open: boolean
-    blockId?: string // 수정 모드
-    prefillDate?: string // 생성 모드
+    blockId?: string
+    prefillDate?: string
     prefillProjectId?: string
+    prefillStartTime?: string
   }
-  openBlockModal: (opts?: { blockId?: string; date?: string; projectId?: string }) => void
+  openBlockModal: (opts?: { blockId?: string; date?: string; projectId?: string; startTime?: string }) => void
   closeBlockModal: () => void
 }
 
@@ -43,12 +44,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [selectedDate, setSelectedDate] = useState(() => new Date())
   const [blockModal, setBlockModal] = useState<AppState['blockModal']>({ open: false })
 
-  const openBlockModal = useCallback((opts?: { blockId?: string; date?: string; projectId?: string }) => {
+  const openBlockModal = useCallback((opts?: { blockId?: string; date?: string; projectId?: string; startTime?: string }) => {
     setBlockModal({
       open: true,
       blockId: opts?.blockId,
       prefillDate: opts?.date,
       prefillProjectId: opts?.projectId,
+      prefillStartTime: opts?.startTime,
     })
   }, [])
 

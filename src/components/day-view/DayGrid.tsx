@@ -1,81 +1,102 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { format, addDays, isToday, isSaturday, isSunday } from 'date-fns'
+import { format, addDays } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { useDroppable } from '@dnd-kit/core'
 import { useProjects } from '@/hooks/useProjects'
 import { useWeekBlocks } from '@/hooks/useBlocks'
+import { useCoreTime } from '@/hooks/useCoreTime'
 import { useAppState } from '@/lib/store'
-import { BlockCard } from '@/components/blocks/BlockCard'
+import { Block, PROJECT_COLORS, ColorKey, CoreTimeRange } from '@/types'
 import { BlockModal } from '@/components/blocks/BlockModal'
-import { Block, PROJECT_COLORS, ColorKey } from '@/types'
 import { cn } from '@/lib/utils'
 
-function DayColumn({
-  day,
-  blocks,
-  onAddClick,
-  onBlockClick,
-}: {
-  day: Date
-  blocks: Block[]
-  onAddClick: () => void
-  onBlockClick: (block: Block) => void
-}) {
-  const dateStr = format(day, 'yyyy-MM-dd')
-  const { isOver, setNodeRef } = useDroppable({ id: `daycol-${dateStr}` })
-  const today = isToday(day)
-  const weekend = isSaturday(day) || isSunday(day)
+const START_HOUR = 6
+const END_HOUR = 23
+const HOURS = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i)
+const HOUR_HEIGHT = 64
 
-  const { data: projects = [] } = useProjects()
-  const projectMap = useMemo(() => Object.fromEntries(projects.map(p => [p.id, p])), [projects])
+function timeToMinutes(time: string) {
+  const [h, m] = time.split(':').map(Number)
+  return h * 60 + m
+}
+
+function minutesToPx(minutes: number) {
+  return ((minutes - START_HOUR * 60) / 60) * HOUR_HEIGHT
+}
+
+function buildCoreSegments(ranges: CoreTimeRange[]) {
+  return ranges
+    .map(r => ({
+      top: minutesToPx(timeToMinutes(r.start_time)),
+      bottom: minutesToPx(timeToMinutes(r.end_time)),
+      startLabel: r.start_time.slice(0, 5),
+      endLabel: r.end_time.slice(0, 5),
+    }))
+    .sort((a, b) => a.top - b.top)
+}
+
+function CoreTimeOverlay({ ranges }: { ranges: CoreTimeRange[] }) {
+  const totalHeight = HOURS.length * HOUR_HEIGHT
+  if (ranges.length === 0) return null
+  const segments = buildCoreSegments(ranges)
+
+  const nonCoreRects: { top: number; height: number }[] = []
+  let cursor = 0
+  for (const seg of segments) {
+    if (seg.top > cursor) nonCoreRects.push({ top: cursor, height: seg.top - cursor })
+    cursor = seg.bottom
+  }
+  if (cursor < totalHeight) nonCoreRects.push({ top: cursor, height: totalHeight - cursor })
 
   return (
-    <div className="flex flex-col border-r border-gray-100 last:border-r-0">
-      {/* 날짜 헤더 */}
-      <div
-        className={cn(
-          'sticky top-0 z-20 px-2 py-2.5 border-b border-gray-200 text-center select-none flex-shrink-0',
-          today ? 'bg-gray-900' : weekend ? 'bg-gray-50' : 'bg-white',
-        )}
-      >
-        <div className="text-[11px] font-medium mb-0.5 text-gray-400">
-          {format(day, 'EEE', { locale: ko })}
+    <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 1 }}>
+      {nonCoreRects.map((rect, i) => (
+        <div key={i} className="absolute left-0 right-0" style={{ top: rect.top, height: rect.height, backgroundColor: 'rgba(241,239,232,0.55)' }} />
+      ))}
+      {segments.map((seg, i) => (
+        <div key={i}>
+          <div className="absolute left-0 right-0 flex items-center" style={{ top: seg.top }}>
+            <div className="absolute left-0 right-0 border-t-[1.5px] border-blue-200" />
+            <span className="absolute left-1 text-[9px] font-semibold leading-none select-none" style={{ color: '#6BA7D8', top: 1 }}>▾{seg.startLabel}</span>
+          </div>
+          <div className="absolute left-0 right-0 flex items-center" style={{ top: seg.bottom }}>
+            <div className="absolute left-0 right-0 border-t-[1.5px] border-blue-200" />
+            <span className="absolute left-1 text-[9px] font-semibold leading-none select-none" style={{ color: '#6BA7D8', top: -10 }}>▴{seg.endLabel}</span>
+          </div>
         </div>
-        <div className={cn('text-xl font-bold leading-none', today ? 'text-white' : weekend ? 'text-gray-400' : 'text-gray-800')}>
-          {format(day, 'd')}
-        </div>
-      </div>
+      ))}
+    </div>
+  )
+}
 
-      {/* 블록 영역 */}
-      <div
-        ref={setNodeRef}
-        onClick={onAddClick}
-        className={cn(
-          'flex-1 min-h-[120px] p-1.5 space-y-0.5 relative group cursor-pointer transition-colors',
-          isOver && 'bg-blue-50 ring-1 ring-inset ring-blue-200',
-          today && 'bg-amber-50/30',
-          weekend && !today && 'bg-gray-50/60',
-        )}
-      >
-        {blocks.map(block => {
-          const project = projectMap[block.project_id]
-          if (!project) return null
-          return (
-            <BlockCard
-              key={block.id}
-              block={block}
-              project={project}
-              compact
-              onClick={e => { e?.stopPropagation(); onBlockClick(block) }}
-            />
-          )
-        })}
-        <div className="absolute bottom-1 right-1 w-5 h-5 rounded-full text-gray-400 items-center justify-center text-xs hidden group-hover:flex hover:bg-gray-200 transition-colors">
-          +
-        </div>
+function BlockPill({ block, onClick }: { block: Block; onClick: () => void }) {
+  const { data: projects = [] } = useProjects()
+  const project = projects.find(p => p.id === block.project_id)
+  if (!project) return null
+
+  const color = PROJECT_COLORS[project.color as ColorKey]
+  const palette = block.is_done ? color.done : color.pending
+
+  const startMin = block.start_time ? timeToMinutes(block.start_time) : START_HOUR * 60
+  const endMin = block.end_time ? timeToMinutes(block.end_time) : startMin + 60
+  const top = minutesToPx(startMin)
+  const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT, 24)
+
+  return (
+    <div
+      className="absolute left-1 right-1 rounded-lg px-2 py-1 cursor-pointer overflow-hidden border-l-[3px] transition-all hover:brightness-95"
+      style={{ top, height, backgroundColor: palette.bg, color: palette.text, borderLeftColor: palette.accent, zIndex: 10 }}
+      onClick={onClick}
+    >
+      <div className="text-xs font-semibold truncate leading-snug">
+        {block.title}{block.is_done && ' ✓'}
       </div>
+      {height > 36 && block.start_time && (
+        <div className="text-[10px] opacity-70 leading-none mt-0.5">
+          {block.start_time.slice(0, 5)}{block.end_time ? `–${block.end_time.slice(0, 5)}` : ''}
+        </div>
+      )}
     </div>
   )
 }
@@ -83,35 +104,107 @@ function DayColumn({
 export function DayGrid() {
   const { currentWeekStart, blockModal, openBlockModal, closeBlockModal } = useAppState()
   const { data: blocks = [] } = useWeekBlocks(currentWeekStart)
+  const { data: coreRanges = [] } = useCoreTime()
   const [editBlock, setEditBlock] = useState<Block | null>(null)
+  const [selectedDate, setSelectedDate] = useState(() => format(new Date(), 'yyyy-MM-dd'))
 
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i)),
     [currentWeekStart],
   )
 
-  const blocksByDate = useMemo(() => {
-    const map = new Map<string, Block[]>()
-    blocks.forEach(b => {
-      if (!map.has(b.start_date)) map.set(b.start_date, [])
-      map.get(b.start_date)!.push(b)
-    })
-    return map
-  }, [blocks])
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const dayBlocks = useMemo(
+    () => blocks.filter(b => b.start_date === selectedDate),
+    [blocks, selectedDate],
+  )
+
+  const now = new Date()
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
+  const nowTop = minutesToPx(nowMinutes)
+  const showNowLine = selectedDate === today && nowMinutes >= START_HOUR * 60 && nowMinutes < END_HOUR * 60
+
+  const handleColumnClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const y = e.clientY - rect.top
+    const totalMinutes = START_HOUR * 60 + Math.floor((y / HOUR_HEIGHT) * 60)
+    const snapped = Math.round(totalMinutes / 15) * 15
+    const h = String(Math.floor(snapped / 60)).padStart(2, '0')
+    const m = String(snapped % 60).padStart(2, '0')
+    openBlockModal({ date: selectedDate, startTime: `${h}:${m}` })
+  }
 
   return (
     <>
-      <div className="flex-1 overflow-auto">
-        <div className="grid min-h-full" style={{ gridTemplateColumns: 'repeat(7, minmax(120px, 1fr))' }}>
-          {weekDays.map(day => (
-            <DayColumn
-              key={day.toISOString()}
-              day={day}
-              blocks={blocksByDate.get(format(day, 'yyyy-MM-dd')) ?? []}
-              onAddClick={() => openBlockModal({ date: format(day, 'yyyy-MM-dd') })}
-              onBlockClick={block => setEditBlock(block)}
-            />
-          ))}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* 날짜 탭 */}
+        <div className="flex border-b border-gray-100 bg-white flex-shrink-0">
+          <div className="w-14 flex-shrink-0" />
+          {weekDays.map(day => {
+            const dateStr = format(day, 'yyyy-MM-dd')
+            const isSelected = dateStr === selectedDate
+            const isToday = dateStr === today
+            return (
+              <button
+                key={dateStr}
+                onClick={() => setSelectedDate(dateStr)}
+                className={cn('flex-1 py-2 text-center transition-colors border-b-2', isSelected ? 'border-gray-900' : 'border-transparent')}
+              >
+                <div className={cn('text-[11px]', isToday ? 'text-blue-500 font-semibold' : 'text-gray-400')}>
+                  {format(day, 'EEE', { locale: ko })}
+                </div>
+                <div className={cn('text-base font-bold',
+                  isSelected && isToday ? 'text-blue-500' :
+                  isSelected ? 'text-gray-900' :
+                  isToday ? 'text-blue-400' : 'text-gray-500',
+                )}>
+                  {format(day, 'd')}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* 그리드 본문 */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="flex" style={{ minHeight: HOURS.length * HOUR_HEIGHT }}>
+            {/* 시간 레이블 */}
+            <div className="w-14 flex-shrink-0 relative bg-white">
+              {HOURS.map(h => (
+                <div key={h} className="absolute right-2 text-[10px] text-gray-400 leading-none" style={{ top: (h - START_HOUR) * HOUR_HEIGHT - 6 }}>
+                  {h}:00
+                </div>
+              ))}
+            </div>
+
+            {/* 블록 컬럼 */}
+            <div className="flex-1 relative bg-white" style={{ cursor: 'crosshair' }} onClick={handleColumnClick}>
+              <CoreTimeOverlay ranges={coreRanges} />
+
+              {/* 격자선 */}
+              {HOURS.map(h => (
+                <div key={h} className="absolute left-0 right-0 border-t border-gray-100 pointer-events-none" style={{ top: (h - START_HOUR) * HOUR_HEIGHT, zIndex: 2 }} />
+              ))}
+              {HOURS.map(h => (
+                <div key={`${h}-half`} className="absolute left-0 right-0 pointer-events-none" style={{ top: (h - START_HOUR) * HOUR_HEIGHT + HOUR_HEIGHT / 2, borderTop: '1px dashed #f0f0f0', zIndex: 2 }} />
+              ))}
+
+              {/* 현재 시간 선 */}
+              {showNowLine && (
+                <div className="absolute left-0 right-0 pointer-events-none" style={{ top: nowTop, zIndex: 20 }}>
+                  <div className="flex items-center">
+                    <div className="w-2 h-2 rounded-full bg-red-500 -ml-1 flex-shrink-0" />
+                    <div className="flex-1 h-px bg-red-400" />
+                  </div>
+                </div>
+              )}
+
+              {/* 블록들 */}
+              {dayBlocks.map(block => (
+                <BlockPill key={block.id} block={block} onClick={() => setEditBlock(block)} />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -120,14 +213,11 @@ export function DayGrid() {
         onClose={closeBlockModal}
         prefillDate={blockModal.prefillDate}
         prefillProjectId={blockModal.prefillProjectId}
+        prefillStartTime={blockModal.prefillStartTime}
       />
 
       {editBlock && (
-        <BlockModal
-          open
-          onClose={() => setEditBlock(null)}
-          editBlock={editBlock}
-        />
+        <BlockModal open onClose={() => setEditBlock(null)} editBlock={editBlock} />
       )}
     </>
   )
