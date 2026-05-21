@@ -4,7 +4,6 @@ import { useMemo, useRef, useState } from 'react'
 import { format, addDays } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { useDroppable, useDraggable } from '@dnd-kit/core'
-import { CSS } from '@dnd-kit/utilities'
 import { useProjects } from '@/hooks/useProjects'
 import { useWeekBlocks } from '@/hooks/useBlocks'
 import { useCoreTime } from '@/hooks/useCoreTime'
@@ -109,10 +108,9 @@ function BlockPill({ block, onClick }: { block: Block; onClick: () => void }) {
         backgroundColor: palette.bg,
         color: palette.text,
         borderLeftColor: palette.accent,
-        zIndex: isDragging ? 50 : 10,
-        opacity: isDragging ? 0.35 : 1,
-        transform: CSS.Translate.toString(transform),
-        cursor: isDragging ? 'grabbing' : 'grab',
+        zIndex: 10,
+        opacity: isDragging ? 0 : 1,
+        cursor: 'grab',
       }}
       onClick={e => { e.stopPropagation(); onClick() }}
     >
