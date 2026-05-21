@@ -60,7 +60,7 @@ export const PROJECT_COLORS = {
   },
   amber: {
     pending: { bg: '#FAEEDA', text: '#633806', accent: '#EF9F27' },
-    done: { bg: '#BA7517', text: '#FFFFFF', accent: '#854F0B' },
+    done: { bg: '#F5C400', text: '#5C3D00', accent: '#D4A800' },
   },
   green: {
     pending: { bg: '#EAF3DE', text: '#27500A', accent: '#97C459' },
