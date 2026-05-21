@@ -5,6 +5,7 @@ import { format, addDays } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { useDroppable, useDraggable } from '@dnd-kit/core'
 import { useProjects } from '@/hooks/useProjects'
+import { useUpdateBlock } from '@/hooks/useBlocks'
 import { useWeekBlocks } from '@/hooks/useBlocks'
 import { useCoreTime } from '@/hooks/useCoreTime'
 import { useAppState } from '@/lib/store'
@@ -73,6 +74,7 @@ function CoreTimeOverlay({ ranges }: { ranges: CoreTimeRange[] }) {
 
 function BlockPill({ block, onClick }: { block: Block; onClick: () => void }) {
   const { data: projects = [] } = useProjects()
+  const { mutate: updateBlock } = useUpdateBlock()
   const project = projects.find(p => p.id === block.project_id)
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -101,7 +103,7 @@ function BlockPill({ block, onClick }: { block: Block; onClick: () => void }) {
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      className="absolute left-1 right-1 rounded-lg px-2 py-1 overflow-hidden border-l-[3px] hover:brightness-95 transition-all"
+      className="absolute left-1 right-1 rounded-lg px-2 py-1 overflow-hidden border-l-[3px] hover:brightness-95 transition-all group"
       style={{
         top,
         height,
@@ -114,7 +116,20 @@ function BlockPill({ block, onClick }: { block: Block; onClick: () => void }) {
       }}
       onClick={e => { e.stopPropagation(); onClick() }}
     >
-      <div className="text-xs font-semibold truncate leading-snug">
+      {/* 완료 토글 버튼 */}
+      <button
+        className={`absolute top-1 right-1 w-4 h-4 rounded-full border-2 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity ${block.is_done ? 'border-current bg-current' : 'border-current bg-transparent'}`}
+        onClick={e => { e.stopPropagation(); updateBlock({ id: block.id, is_done: !block.is_done }) }}
+        title={block.is_done ? '완료 취소' : '완료 표시'}
+      >
+        {block.is_done && (
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="white">
+            <path d="M1 4l2 2 4-4" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+          </svg>
+        )}
+      </button>
+
+      <div className="text-xs font-semibold truncate leading-snug pr-4">
         {block.title}{block.is_done && ' ✓'}
       </div>
       {height > 36 && block.start_time && (
