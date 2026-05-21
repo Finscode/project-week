@@ -75,10 +75,9 @@ export function AppDndProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // ── 일간 뷰 컬럼: "daycol-{projectId}-{yyyy-MM-dd}" ──
+    // ── 주간 뷰 컬럼: "daycol-{yyyy-MM-dd}" ──
     if (overId.startsWith('daycol-')) {
-      const parts = overId.replace('daycol-', '').split('-')
-      const dropDate = parts.slice(-3).join('-')
+      const dropDate = overId.replace('daycol-', '')
 
       // 드래그된 아이템의 현재 위치에서 컬럼 상단까지의 Y 오프셋으로 시간 계산
       const activeTop = e.active.rect.current.translated?.top ?? 0
