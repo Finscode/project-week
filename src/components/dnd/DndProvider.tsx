@@ -2,7 +2,7 @@
 
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { useState } from 'react'
-import { useCreateBlock } from '@/hooks/useBlocks'
+import { useCreateBlock, useUpdateBlock } from '@/hooks/useBlocks'
 import { useTasks } from '@/hooks/useTasks'
 
 interface DragData {
@@ -11,6 +11,18 @@ interface DragData {
   blockId?: string
   projectId?: string
   title?: string
+  startTime?: string | null
+  endTime?: string | null
+}
+
+function timeToMinutes(time: string) {
+  const [h, m] = time.split(':').map(Number)
+  return h * 60 + m
+}
+
+function minutesToTimeStr(minutes: number) {
+  const clamped = Math.min(Math.max(minutes, 0), 23 * 60)
+  return `${String(Math.floor(clamped / 60)).padStart(2, '0')}:${String(clamped % 60).padStart(2, '0')}`
 }
 
 const START_HOUR = 6
@@ -34,6 +46,7 @@ function addOneHour(time: string): string {
 export function AppDndProvider({ children }: { children: React.ReactNode }) {
   const [activeData, setActiveData] = useState<DragData | null>(null)
   const { mutate: createBlock } = useCreateBlock()
+  const { mutate: updateBlock } = useUpdateBlock()
   const { data: tasks = [] } = useTasks()
 
   const sensors = useSensors(
@@ -51,6 +64,29 @@ export function AppDndProvider({ children }: { children: React.ReactNode }) {
 
     const overId = String(over.id)
     const data = active.data.current as DragData
+
+    // ── 블록 이동 (주간 뷰 내 드래그) ──
+    if (data.type === 'block' && data.blockId && overId.startsWith('daycol-')) {
+      const dropDate = overId.replace('daycol-', '')
+      const activeTop = e.active.rect.current.translated?.top ?? 0
+      const overTop = over.rect.top
+      const offsetY = activeTop - overTop
+
+      const newStartMin = START_HOUR * 60 + Math.round(Math.max(0, Math.floor((offsetY / HOUR_HEIGHT) * 60)) / 15) * 15
+      const newStartTime = minutesToTimeStr(newStartMin)
+
+      let newEndTime: string | null = null
+      if (data.startTime && data.endTime) {
+        const duration = timeToMinutes(data.endTime) - timeToMinutes(data.startTime)
+        newEndTime = minutesToTimeStr(newStartMin + duration)
+      } else if (data.startTime) {
+        newEndTime = minutesToTimeStr(newStartMin + 60)
+      }
+
+      updateBlock({ id: data.blockId, start_date: dropDate, end_date: dropDate, start_time: newStartTime, end_time: newEndTime })
+      return
+    }
+
     if (data.type !== 'task' || !data.taskId) return
 
     const task = tasks.find(t => t.id === data.taskId)
@@ -107,8 +143,11 @@ export function AppDndProvider({ children }: { children: React.ReactNode }) {
       {children}
       <DragOverlay dropAnimation={null}>
         {activeData ? (
-          <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm shadow-xl text-gray-700 rotate-1 opacity-95 pointer-events-none">
+          <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm shadow-xl text-gray-700 opacity-90 pointer-events-none">
             {activeData.title ?? '블록'}
+            {activeData.type === 'block' && activeData.startTime && (
+              <div className="text-[10px] text-gray-400 mt-0.5">{activeData.startTime.slice(0,5)}</div>
+            )}
           </div>
         ) : null}
       </DragOverlay>

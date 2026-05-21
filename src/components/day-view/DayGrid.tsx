@@ -3,7 +3,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { format, addDays } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { useDroppable } from '@dnd-kit/core'
+import { useDroppable, useDraggable } from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
 import { useProjects } from '@/hooks/useProjects'
 import { useWeekBlocks } from '@/hooks/useBlocks'
 import { useCoreTime } from '@/hooks/useCoreTime'
@@ -74,6 +75,18 @@ function CoreTimeOverlay({ ranges }: { ranges: CoreTimeRange[] }) {
 function BlockPill({ block, onClick }: { block: Block; onClick: () => void }) {
   const { data: projects = [] } = useProjects()
   const project = projects.find(p => p.id === block.project_id)
+
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `block-${block.id}`,
+    data: {
+      type: 'block',
+      blockId: block.id,
+      startTime: block.start_time,
+      endTime: block.end_time,
+      title: block.title,
+    },
+  })
+
   if (!project) return null
 
   const color = PROJECT_COLORS[project.color as ColorKey]
@@ -86,8 +99,21 @@ function BlockPill({ block, onClick }: { block: Block; onClick: () => void }) {
 
   return (
     <div
-      className="absolute left-1 right-1 rounded-lg px-2 py-1 cursor-pointer overflow-hidden border-l-[3px] hover:brightness-95 transition-all"
-      style={{ top, height, backgroundColor: palette.bg, color: palette.text, borderLeftColor: palette.accent, zIndex: 10 }}
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      className="absolute left-1 right-1 rounded-lg px-2 py-1 overflow-hidden border-l-[3px] hover:brightness-95 transition-all"
+      style={{
+        top,
+        height,
+        backgroundColor: palette.bg,
+        color: palette.text,
+        borderLeftColor: palette.accent,
+        zIndex: isDragging ? 50 : 10,
+        opacity: isDragging ? 0.35 : 1,
+        transform: CSS.Translate.toString(transform),
+        cursor: isDragging ? 'grabbing' : 'grab',
+      }}
       onClick={e => { e.stopPropagation(); onClick() }}
     >
       <div className="text-xs font-semibold truncate leading-snug">
