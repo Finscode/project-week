@@ -118,12 +118,12 @@ export function WeekGrid() {
     return map
   }, [blocks])
 
-  const gridTemplateColumns = `200px repeat(7, minmax(130px, 1fr))`
+  const gridTemplateColumns = `160px repeat(7, 1fr)`
 
   return (
     <>
       <div className="flex-1 overflow-auto">
-        <div style={{ display: 'grid', gridTemplateColumns }} className="min-w-max">
+        <div style={{ display: 'grid', gridTemplateColumns }} className="w-full">
           {/* 헤더 행 */}
           <div className="sticky top-0 left-0 z-30 bg-white border-r border-b border-gray-200 px-3 py-3 flex items-end">
             <span className="text-xs text-gray-400 font-medium">프로젝트</span>
