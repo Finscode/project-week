@@ -294,7 +294,7 @@ export function TaskSidebar() {
             +
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto pb-4">
           {projects.map(p => (
             <ProjectSection key={p.id} project={p} tasks={tasks.filter(t => t.project_id === p.id)} />
           ))}
